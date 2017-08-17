@@ -31,7 +31,7 @@ mag_of_peak = np.arange(17,25,1)
 
 
 # Set the database and query
-runName = 'minion_1016'
+runName = 'minion_1018'
 opsdb = db.OpsimDatabase(runName + '_sqlite.db')
 
 # Set the output directory
@@ -269,7 +269,7 @@ template = normalize_template(template)
 
 
 final_data = Table(names=('ra', 'dec', 'filter', 'actual peak day', 'actual peak mag', 'guess peak day', 'guess peak mag',
-                          'number of observations', 'meets requirements'), dtype=('float', 'float', 'string', 'int', 'int', 'float', 'float', 'int', 'bool'))
+                          'number of observations', 'meets requirements'), dtype=('float', 'float', 'string', 'float', 'float', 'float', 'float', 'int', 'bool'))
 
 
 for f in filterNames:
@@ -293,6 +293,10 @@ for f in filterNames:
                     opsim_fmatch = final_opsim[fMatch]
                     opsim_rounded = opsim_fmatch.copy()
                     opsim_rounded['day'] = np.round(opsim_rounded['day'])
+
+		    """We classify a lightcurve as well sampled if there are at least 4 observations in the first 30 days and
+			if the minimum magnitude of these observations does not correspond to the first or last day of observation.
+			We only fit a curve to those combination that meet these requirements"""
                     if (len(np.unique(opsim_rounded['day'])) >= 4
                         and np.round(opsim_fmatch['day'][opsim_fmatch['magnitude'].argmin()]) !=
                                                          np.round(opsim_fmatch['day'].max())
@@ -302,10 +306,10 @@ for f in filterNames:
                         opsim_fmatch2 = new_opsim[fMatch2]
                         fMatch3 = np.where(adjusted_template['filter'] == f)
                         template_fmatch = adjusted_template[fMatch3]
-                        xdata = np.arange(template_fmatch['day'].min(), template_fmatch['day'].max(), 1)
+                        xdata = np.arange(template_fmatch['day'].min(), template_fmatch['day'].max(), 0.1)
                         popt = fit_curve(opsim_fmatch, template_fmatch)
                         guess_peakmag = func(xdata, *popt).min()
-                        guess_peakday = func(xdata, *popt).argmin() + xdata.min()
+                        guess_peakday = np.float(func(xdata, *popt).argmin())/10 + xdata.min()
                         meets_requirements = True
                         final_data.add_row([ra,dec,f,peakday,peakmag,guess_peakday,guess_peakmag,
                                            len(np.unique(opsim_rounded['day'])), meets_requirements])
@@ -313,6 +317,6 @@ for f in filterNames:
                         final_data.add_row([ra,dec,f,peakday,peakmag,0,0,len(np.unique(opsim_rounded['day'])), meets_requirements])
 
 
-file1 = open("minion_1016_wfd1.txt", "w+")
+file1 = open("minion_1018_dd.txt", "w+")
 ascii.write(final_data, file1)
 file1.flush()
