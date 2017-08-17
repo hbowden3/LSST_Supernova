@@ -1,19 +1,35 @@
+"""This program outputs 6 files. All are tables organized by filter and by peak magnitude. 
+The first is a table of the percent of combinations that meet the requirements as
+defined in Resample_Supernovae_Lightcurves.py. The second is the percent of those that meet
+the requirements that had a good polynomial fit (within 0.5 mag and 5 days of the peak. The 
+last 4 tables are all for the standard deviation and the mean of the peak day difference and
+the peak magnitude difference between the template and the polynomial fitting. Outliers are
+removed before standard deviation and mean are calculated."""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.table import Table, Column
 import math
 from astropy.io import ascii
+from scipy import stats
 
 
 def read_data(asciifile):
+    #read in the data produced by Resample_Supernovae_Lightcurves.py
     data = np.genfromtxt(asciifile, dtype=[('ra', np.float), ('dec', np.float), ('filter', 'object'), 
                          ('peakday', np.float), ('peakmag', np.float), ('guess peakday', np.float),
                          ('guess peakmag', np.float), ('number of observations', np.float),
                          ('meets requirements', np.bool)], skip_header = 1)
     return data
 
+def create_table():
+    #create the table organized by magnitude and filter used for all 6 outputs
+    table = Table(names=('mag', 'u', 'g', 'r', 'i', 'z'), dtype=('int', 'float', 'float',
+                                                                                  'float', 'float', 'float'))
+    return table
 
-asciifile = 'minion_1016_wfd1.txt'
+#make sure to change asciifile when running a new cadence, this should correspond to the name of the file you're reading in
+asciifile = 'minion_1018_dd.txt'
 data = read_data(asciifile)
 data = Table(data)
 
@@ -21,19 +37,13 @@ data = Table(data)
 mag_of_peak = np.arange(17,25,1)
 filterNames = ['u', 'g', 'r', 'i', 'z']
 
+percent_well_sampled_table = create_table()
+percent_good_fit_table = create_table()
+std_day_table = create_table()
+mean_day_table = create_table()
+std_mag_table = create_table()
+mean_mag_table = create_table()
 
-percent_well_sampled_table = Table(names=('mag', 'u', 'g', 'r', 'i', 'z'), dtype=('int', 'float', 'float',
-                                                                                  'float', 'float', 'float'))
-percent_good_fit_table = Table(names=('mag', 'u', 'g', 'r', 'i', 'z'), dtype=('int', 'float', 'float',
-                                                                                  'float', 'float', 'float'))
-std_day_table = Table(names=('mag', 'u', 'g', 'r', 'i', 'z'), dtype=('int', 'float', 'float',
-                                                                                  'float', 'float', 'float'))
-mean_day_table = Table(names=('mag', 'u', 'g', 'r', 'i', 'z'), dtype=('int', 'float', 'float',
-                                                                                  'float', 'float', 'float'))
-std_mag_table = Table(names=('mag', 'u', 'g', 'r', 'i', 'z'), dtype=('int', 'float', 'float',
-                                                                                  'float', 'float', 'float'))
-mean_mag_table = Table(names=('mag', 'u', 'g', 'r', 'i', 'z'), dtype=('int', 'float', 'float',
-                                                                                  'float', 'float', 'float'))
 min_mag = 0
 max_mag = 0
 min_day = 0
@@ -56,14 +66,16 @@ for peakmag in mag_of_peak:
         day_difference_list = []
         if len(data_match2['ra']) != 0:
             for line in data_match2:
-                if line['number_of_observations'] >= 4 and line['meets_requirements'] == True:
+                if line['meets_requirements'] == True:
                     well_sampled += 1
+		    #find peak difference between template and polynomial fitting
                     peak_day_difference = line['peakday'] - line['guess_peakday']
                     day_difference_list.append(peak_day_difference)
                     peak_mag_difference = line['peakmag'] - line['guess_peakmag']
                     mag_difference_list.append(peak_mag_difference)
                     if (abs(peak_day_difference) <= 5 and
                         abs(peak_mag_difference) <= 0.5):
+			#those that meet these requirements are classified as a good fit for our purposes
                             good_fit += 1
             percent_well_sampled = well_sampled/(len(data_match2['ra']))*100
             if well_sampled == 0:
@@ -75,12 +87,14 @@ for peakmag in mag_of_peak:
         percent_list1.append(percent_well_sampled)
         percent_list2.append(percent_good_fit)
         try:
-            iq_range_day = np.percentile(day_difference_list, 75) - np.percentile(day_difference_list, 25)
+	    #remove outliers from data
+            iq_range_day = stats.iqr(day_difference_list)
             min_day = np.percentile(day_difference_list, 50) - 1.5*iq_range_day
             max_day = np.percentile(day_difference_list, 50) + 1.5*iq_range_day
-            iq_range_mag = np.percentile(mag_difference_list, 75) - np.percentile(mag_difference_list, 25)
+            iq_range_mag = stats.iqr(mag_difference_list)
             min_mag = np.percentile(mag_difference_list, 50) - iq_range_mag
             max_mag = np.percentile(mag_difference_list, 50) + iq_range_mag
+
             mag_difference_list = [mag for mag in mag_difference_list if mag < max_mag]
             mag_difference_list = [mag for mag in mag_difference_list if mag > min_mag]
             day_difference_list = [day for day in day_difference_list if day < max_day]
@@ -98,6 +112,7 @@ for peakmag in mag_of_peak:
     std_mag_table.add_row(std_mag_difference_list)
     mean_mag_table.add_row(mean_mag_difference_list)
 
+#All below is for printing out the tables created above
 
 percent_well_sampled_table.pprint(max_lines = 10, max_width = 500)
 file2 = open("percent_well_sampled.txt", "w+")
